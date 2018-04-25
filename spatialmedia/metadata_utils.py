@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Utilities for examining/injecting spatial media metadata in MP4/MOV files."""
+"""Utilities for examining spatial media metadata in MP4/MOV files."""
 
 import os
 import re
@@ -113,85 +113,6 @@ integer_regex_group = "(\d+)"
 crop_regex = "^{0}$".format(":".join([integer_regex_group] * 6))
 
 
-def spherical_uuid(metadata):
-    """Constructs a uuid containing spherical metadata.
-
-    Args:
-      metadata: String, xml to inject in spherical tag.
-
-    Returns:
-      uuid_leaf: a box containing spherical metadata.
-    """
-    uuid_leaf = mpeg.Box()
-    assert(len(SPHERICAL_UUID_ID) == 16)
-    uuid_leaf.name = mpeg.constants.TAG_UUID
-    uuid_leaf.header_size = 8
-    uuid_leaf.content_size = 0
-
-    uuid_leaf.contents = SPHERICAL_UUID_ID + metadata.encode("utf-8")
-    uuid_leaf.content_size = len(uuid_leaf.contents)
-
-    return uuid_leaf
-
-
-def mpeg4_add_spherical(mpeg4_file, in_fh, metadata):
-    """Adds a spherical uuid box to an mpeg4 file for all video tracks.
-
-    Args:
-      mpeg4_file: mpeg4, Mpeg4 file structure to add metadata.
-      in_fh: file handle, Source for uncached file contents.
-      metadata: string, xml metadata to inject into spherical tag.
-    """
-    for element in mpeg4_file.moov_box.contents:
-        if element.name == mpeg.constants.TAG_TRAK:
-            added = False
-            element.remove(mpeg.constants.TAG_UUID)
-            for sub_element in element.contents:
-                if sub_element.name != mpeg.constants.TAG_MDIA:
-                    continue
-                for mdia_sub_element in sub_element.contents:
-                    if mdia_sub_element.name != mpeg.constants.TAG_HDLR:
-                        continue
-                    position = mdia_sub_element.content_start() + 8
-                    in_fh.seek(position)
-                    if in_fh.read(4).decode() == mpeg.constants.TRAK_TYPE_VIDE:
-                        added = True
-                        break
-
-                if added:
-                    if not element.add(spherical_uuid(metadata)):
-                        return False
-                    break
-
-    mpeg4_file.resize()
-    return True
-
-def mpeg4_add_spatial_audio(mpeg4_file, in_fh, audio_metadata, console):
-    """Adds spatial audio metadata to the first audio track of the input
-       mpeg4_file. Returns False on failure.
-
-    Args:
-      mpeg4_file: mpeg4, Mpeg4 file structure to add metadata.
-      in_fh: file handle, Source for uncached file contents.
-      audio_metadata: dictionary ('ambisonic_type': string,
-      'ambisonic_order': int),
-      Supports 'periphonic' ambisonic type only.
-    """
-    for element in mpeg4_file.moov_box.contents:
-        if element.name == mpeg.constants.TAG_TRAK:
-            for sub_element in element.contents:
-                if sub_element.name != mpeg.constants.TAG_MDIA:
-                    continue
-                for mdia_sub_element in sub_element.contents:
-                    if mdia_sub_element.name != mpeg.constants.TAG_HDLR:
-                        continue
-                    position = mdia_sub_element.content_start() + 8
-                    in_fh.seek(position)
-                    if in_fh.read(4).decode() == mpeg.constants.TAG_SOUN:
-                        return inject_spatial_audio_atom(
-                            in_fh, sub_element, audio_metadata, console)
-    return True
-
 def mpeg4_add_audio_metadata(mpeg4_file, in_fh, audio_metadata, console):
     num_audio_tracks = get_num_audio_tracks(mpeg4_file, in_fh)
     if num_audio_tracks > 1:
@@ -200,42 +121,6 @@ def mpeg4_add_audio_metadata(mpeg4_file, in_fh, audio_metadata, console):
 
     return mpeg4_add_spatial_audio(mpeg4_file, in_fh, audio_metadata, console)
 
-def inject_spatial_audio_atom(
-    in_fh, audio_media_atom, audio_metadata, console):
-    for atom in audio_media_atom.contents:
-        if atom.name != mpeg.constants.TAG_MINF:
-            continue
-        for element in atom.contents:
-            if element.name != mpeg.constants.TAG_STBL:
-                continue
-            for sub_element in element.contents:
-                if sub_element.name != mpeg.constants.TAG_STSD:
-                    continue
-                for sample_description in sub_element.contents:
-                    if sample_description.name in\
-                            mpeg.constants.SOUND_SAMPLE_DESCRIPTIONS:
-                        in_fh.seek(sample_description.position +
-                                   sample_description.header_size + 16)
-                        num_channels = get_num_audio_channels(
-                            sub_element, in_fh)
-                        num_ambisonic_components = \
-                            get_expected_num_audio_components(
-                                audio_metadata["ambisonic_type"],
-                                audio_metadata["ambisonic_order"])
-                        if num_channels != num_ambisonic_components:
-                            err_msg = "Error: Found %d audio channel(s). "\
-                                  "Expected %d channel(s) for %s ambisonics "\
-                                  "of order %d."\
-                                % (num_channels,
-                                   num_ambisonic_components,
-                                   audio_metadata["ambisonic_type"],
-                                   audio_metadata["ambisonic_order"])
-                            console(err_msg)
-                            return False
-                        sa3d_atom = mpeg.SA3DBox.create(
-                            num_channels, audio_metadata)
-                        sample_description.contents.append(sa3d_atom)
-    return True
 
 def parse_spherical_xml(contents, console):
     """Returns spherical metadata for a set of xml data.
@@ -348,31 +233,6 @@ def parse_mpeg4(input_file, console):
             "permission.")
 
 
-def inject_mpeg4(input_file, output_file, metadata, console):
-    with open(input_file, "rb") as in_fh:
-
-        mpeg4_file = mpeg.load(in_fh)
-        if mpeg4_file is None:
-            console("Error file could not be opened.")
-
-        if not mpeg4_add_spherical(mpeg4_file, in_fh, metadata.video):
-            console("Error failed to insert spherical data")
-
-        if metadata.audio:
-            if not mpeg4_add_audio_metadata(
-                mpeg4_file, in_fh, metadata.audio, console):
-                    console("Error failed to insert spatial audio data")
-
-        console("Saved file settings")
-        parse_spherical_mpeg4(mpeg4_file, in_fh, console)
-
-        with open(output_file, "wb") as out_fh:
-            mpeg4_file.save(in_fh, out_fh)
-        return
-
-    console("Error file: \"" + input_file + "\" does not exist or do not have "
-            "permission.")
-
 def parse_metadata(src, console):
     infile = os.path.abspath(src)
 
@@ -391,105 +251,6 @@ def parse_metadata(src, console):
 
     console("Unknown file type")
     return None
-
-
-def inject_metadata(src, dest, metadata, console):
-    infile = os.path.abspath(src)
-    outfile = os.path.abspath(dest)
-
-    if infile == outfile:
-        return "Input and output cannot be the same"
-
-    try:
-        in_fh = open(infile, "rb")
-        in_fh.close()
-    except:
-        console("Error: " + infile +
-                " does not exist or we do not have permission")
-        return
-
-    console("Processing: " + infile)
-
-    extension = os.path.splitext(infile)[1].lower()
-
-    if (extension in MPEG_FILE_EXTENSIONS):
-        inject_mpeg4(infile, outfile, metadata, console)
-        return
-
-    console("Unknown file type")
-
-
-def generate_spherical_xml(stereo=None, crop=None):
-    # Configure inject xml.
-    additional_xml = ""
-    if stereo == "top-bottom":
-        additional_xml += SPHERICAL_XML_CONTENTS_TOP_BOTTOM
-
-    if stereo == "left-right":
-        additional_xml += SPHERICAL_XML_CONTENTS_LEFT_RIGHT
-
-    if crop:
-        crop_match = re.match(crop_regex, crop)
-        if not crop_match:
-            print("Error: Invalid crop params: {crop}".format(crop=crop))
-            return False
-        else:
-            cropped_width_pixels = int(crop_match.group(1))
-            cropped_height_pixels = int(crop_match.group(2))
-            full_width_pixels = int(crop_match.group(3))
-            full_height_pixels = int(crop_match.group(4))
-            cropped_offset_left_pixels = int(crop_match.group(5))
-            cropped_offset_top_pixels = int(crop_match.group(6))
-
-            # This should never happen based on the crop regex.
-            if full_width_pixels <= 0 or full_height_pixels <= 0:
-                print("Error with crop params: full pano dimensions are "\
-                        "invalid: width = {width} height = {height}".format(
-                            width=full_width_pixels,
-                            height=full_height_pixels))
-                return False
-
-            if (cropped_width_pixels <= 0 or
-                    cropped_height_pixels <= 0 or
-                    cropped_width_pixels > full_width_pixels or
-                    cropped_height_pixels > full_height_pixels):
-                print("Error with crop params: cropped area dimensions are "\
-                        "invalid: width = {width} height = {height}".format(
-                            width=cropped_width_pixels,
-                            height=cropped_height_pixels))
-                return False
-
-            # We are pretty restrictive and don't allow anything strange. There
-            # could be use-cases for a horizontal offset that essentially
-            # translates the domain, but we don't support this (so that no
-            # extra work has to be done on the client).
-            total_width = cropped_offset_left_pixels + cropped_width_pixels
-            total_height = cropped_offset_top_pixels + cropped_height_pixels
-            if (cropped_offset_left_pixels < 0 or
-                    cropped_offset_top_pixels < 0 or
-                    total_width > full_width_pixels or
-                    total_height > full_height_pixels):
-                    print("Error with crop params: cropped area offsets are "\
-                            "invalid: left = {left} top = {top} "\
-                            "left+cropped width: {total_width} "\
-                            "top+cropped height: {total_height}".format(
-                                left=cropped_offset_left_pixels,
-                                top=cropped_offset_top_pixels,
-                                total_width=total_width,
-                                total_height=total_height))
-                    return False
-
-            additional_xml += SPHERICAL_XML_CONTENTS_CROP_FORMAT.format(
-                cropped_width_pixels, cropped_height_pixels,
-                full_width_pixels, full_height_pixels,
-                cropped_offset_left_pixels, cropped_offset_top_pixels)
-
-    spherical_xml = (SPHERICAL_XML_HEADER +
-                     SPHERICAL_XML_CONTENTS +
-                     additional_xml +
-                     SPHERICAL_XML_FOOTER)
-    return spherical_xml
-
 
 def get_descriptor_length(in_fh):
     """Derives the length of the MP4 elementary stream descriptor at the
