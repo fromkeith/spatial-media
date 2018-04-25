@@ -39,68 +39,14 @@ def main():
 
   parser = argparse.ArgumentParser(
       usage=
-      "%(prog)s [options] [files...]\n\nBy default prints out spatial media "
+      "%(prog)s [file]\n\nBy default prints out spatial media "
       "metadata from specified files.")
-  parser.add_argument(
-      "-i",
-      "--inject",
-      action="store_true",
-      help=
-      "injects spatial media metadata into the first file specified (.mp4 or "
-      ".mov) and saves the result to the second file specified")
-  video_group = parser.add_argument_group("Spherical Video")
-  video_group.add_argument("-s",
-                           "--stereo",
-                           action="store",
-                           dest="stereo_mode",
-                           metavar="STEREO-MODE",
-                           choices=["none", "top-bottom", "left-right"],
-                           default="none",
-                           help="stereo mode (none | top-bottom | left-right)")
-  video_group.add_argument(
-      "-c",
-      "--crop",
-      action="store",
-      default=None,
-      help=
-      "crop region. Must specify 6 integers in the form of \"w:h:f_w:f_h:x:y\""
-      " where w=CroppedAreaImageWidthPixels h=CroppedAreaImageHeightPixels "
-      "f_w=FullPanoWidthPixels f_h=FullPanoHeightPixels "
-      "x=CroppedAreaLeftPixels y=CroppedAreaTopPixels")
-  audio_group = parser.add_argument_group("Spatial Audio")
-  audio_group.add_argument(
-      "-a",
-      "--spatial-audio",
-      action="store_true",
-      help=
-      "spatial audio. First-order periphonic ambisonics with ACN channel "
-      "ordering and SN3D normalization")
-  parser.add_argument("file", nargs="+", help="input/output files")
+  parser.add_argument("file", help="input file")
 
   args = parser.parse_args()
 
-  if args.inject:
-    if len(args.file) != 2:
-      console("Injecting metadata requires both an input file and output file.")
-      return
-
-    metadata = metadata_utils.Metadata()
-    metadata.video = metadata_utils.generate_spherical_xml(args.stereo_mode,
-                                                           args.crop)
-
-    if args.spatial_audio:
-      metadata.audio = metadata_utils.SPATIAL_AUDIO_DEFAULT_METADATA
-
-    if metadata.video:
-      metadata_utils.inject_metadata(args.file[0], args.file[1], metadata,
-                                     console)
-    else:
-      console("Failed to generate metadata.")
-    return
-
   if len(args.file) > 0:
-    for input_file in args.file:
-      metadata_utils.parse_metadata(input_file, console)
+    metadata_utils.parse_metadata(args.file, console)
     return
 
   parser.print_help()
