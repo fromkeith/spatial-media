@@ -93,6 +93,17 @@ SPATIAL_AUDIO_DEFAULT_METADATA = {
     "channel_map": [0, 1, 2, 3],
 }
 
+DEFAULT_XML_CONTENTS = """
+<rdf:SphericalVideo
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:GSpherical="http://ns.google.com/videos/1.0/spherical/">
+  <GSpherical:Spherical>true</GSpherical:Spherical>
+  <GSpherical:Stitched>true</GSpherical:Stitched>
+  <GSpherical:StitchingSoftware>Unknown</GSpherical:StitchingSoftware>
+  <GSpherical:ProjectionType>equirectangular</GSpherical:ProjectionType>
+</rdf:SphericalVideo>
+"""
+
 class Metadata(object):
     def __init__(self):
         self.video = None
@@ -194,8 +205,16 @@ def parse_spherical_mpeg4(mpeg4_file, fh, console):
                             contents = sub_element.contents[16:]
                         else:
                             contents = fh.read(sub_element.content_size - 16)
+                        if len(contents) == 0:
+                            # empty XML. normally from a 360 video processing tool misbehaving Eg. Gear 360 ActionDirector
+                            # so just put in default metadata
+                            contents = DEFAULT_XML_CONTENTS
+                            print 'using default'
+
+                        # I have seen some encodings have invalid starting data (Gear360 ActionDirector)
+                        # So when decoding, drop invalid ascii characters
                         metadata.video[trackName] = \
-                            parse_spherical_xml(contents.decode("utf-8"), console)
+                            parse_spherical_xml(contents.decode("ascii", "ignore"), console)
 
                 if sub_element.name == mpeg.constants.TAG_MDIA:
                     for mdia_sub_element in sub_element.contents:
