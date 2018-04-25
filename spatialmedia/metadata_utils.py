@@ -218,13 +218,7 @@ def parse_metadata_structured(src):
         in_fh.close()
     except:
         return createErrorDict('No permissions to access file')
-
-    extension = os.path.splitext(infile)[1].lower()
-
-    if extension in MPEG_FILE_EXTENSIONS:
-        return parse_mpeg4(infile)
-
-    return createErrorDict('Unknown file type')
+    return parse_mpeg4(infile)
 
 def parse_metadata(src):
     result = parse_metadata_structured(src)
