@@ -209,7 +209,6 @@ def parse_spherical_mpeg4(mpeg4_file, fh, console):
                             # empty XML. normally from a 360 video processing tool misbehaving Eg. Gear 360 ActionDirector
                             # so just put in default metadata
                             contents = DEFAULT_XML_CONTENTS
-                            print 'using default'
 
                         # I have seen some encodings have invalid starting data (Gear360 ActionDirector)
                         # So when decoding, drop invalid ascii characters
