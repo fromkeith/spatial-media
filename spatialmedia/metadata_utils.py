@@ -23,6 +23,7 @@ import struct
 import traceback
 import xml.etree
 import xml.etree.ElementTree
+import json
 
 from spatialmedia import mpeg
 
@@ -103,6 +104,10 @@ class Metadata(object):
 class ParsedMetadata(object):
     def __init__(self):
         self.video = dict()
+    def toJson(self):
+        full = dict()
+        full['video'] = self.video
+        return json.dumps(full)
 
 SPHERICAL_PREFIX = "{http://ns.google.com/videos/1.0/spherical/}"
 SPHERICAL_TAGS = dict()
@@ -114,7 +119,7 @@ crop_regex = "^{0}$".format(":".join([integer_regex_group] * 6))
 
 
 
-def parse_spherical_xml(contents, console):
+def parse_spherical_xml(contents):
     """Returns spherical metadata for a set of xml data.
 
     Args:
@@ -127,36 +132,29 @@ def parse_spherical_xml(contents, console):
         parsed_xml = xml.etree.ElementTree.XML(contents)
     except xml.etree.ElementTree.ParseError:
         try:
-            console(traceback.format_exc())
-            console(contents)
             index = contents.find("<rdf:SphericalVideo")
             if index != -1:
                 index += len("<rdf:SphericalVideo")
                 contents = contents[:index] + RDF_PREFIX + contents[index:]
             parsed_xml = xml.etree.ElementTree.XML(contents)
-            console("\t\tWarning missing rdf prefix:", RDF_PREFIX)
         except xml.etree.ElementTree.ParseError as e:
-            console("\t\tParser Error on XML")
-            console(traceback.format_exc())
-            console(contents)
-            return
+            errorDict = dict()
+            errorDict['error'] = 'Invalid XML'
+            return errorDict
 
     sphericalDictionary = dict()
     for child in parsed_xml.getchildren():
         if child.tag in SPHERICAL_TAGS.keys():
-            console("\t\t" + SPHERICAL_TAGS[child.tag]
-                    + " = " + child.text)
             sphericalDictionary[SPHERICAL_TAGS[child.tag]] = child.text
         else:
             tag = child.tag
             if child.tag[:len(spherical_prefix)] == spherical_prefix:
                 tag = child.tag[len(spherical_prefix):]
-            console("\t\tUnknown: " + tag + " = " + child.text)
 
     return sphericalDictionary
 
 
-def parse_spherical_mpeg4(mpeg4_file, fh, console):
+def parse_spherical_mpeg4(mpeg4_file, fh):
     """Returns spherical metadata for a loaded mpeg4 file.
 
     Args:
@@ -171,7 +169,6 @@ def parse_spherical_mpeg4(mpeg4_file, fh, console):
     for element in mpeg4_file.moov_box.contents:
         if element.name == mpeg.constants.TAG_TRAK:
             trackName = "Track %d" % track_num
-            console("\t%s" % trackName)
             track_num += 1
             for sub_element in element.contents:
                 if sub_element.name == mpeg.constants.TAG_UUID:
@@ -194,42 +191,44 @@ def parse_spherical_mpeg4(mpeg4_file, fh, console):
                         # I have seen some encodings have invalid starting data (Gear360 ActionDirector)
                         # So when decoding, drop invalid ascii characters
                         metadata.video[trackName] = \
-                            parse_spherical_xml(contents.decode("ascii", "ignore"), console)
+                            parse_spherical_xml(contents.decode("ascii", "ignore"))
 
     return metadata
 
-def parse_mpeg4(input_file, console):
+def createErrorDict(errMsg):
+    result = ParsedMetadata()
+    result.video['error'] = dict()
+    result.video['error']['error'] = errMsg
+    return result
+
+def parse_mpeg4(input_file):
     with open(input_file, "rb") as in_fh:
         mpeg4_file = mpeg.load(in_fh)
         if mpeg4_file is None:
-            console("Error, file could not be opened.")
-            return
+            return createErrorDict('Invalid File')
+        return parse_spherical_mpeg4(mpeg4_file, in_fh)
 
-        console("Loaded file...")
-        return parse_spherical_mpeg4(mpeg4_file, in_fh, console)
+    return createErrorDict('Missing File')
 
-    console("Error \"" + input_file + "\" does not exist or do not have "
-            "permission.")
-
-
-def parse_metadata(src, console):
+def parse_metadata_structured(src):
     infile = os.path.abspath(src)
 
     try:
         in_fh = open(infile, "rb")
         in_fh.close()
     except:
-        console("Error: " + infile +
-                " does not exist or we do not have permission")
+        return createErrorDict('No permissions to access file')
 
-    console("Processing: " + infile)
     extension = os.path.splitext(infile)[1].lower()
 
     if extension in MPEG_FILE_EXTENSIONS:
-        return parse_mpeg4(infile, console)
+        return parse_mpeg4(infile)
 
-    console("Unknown file type")
-    return None
+    return createErrorDict('Unknown file type')
+
+def parse_metadata(src):
+    result = parse_metadata_structured(src)
+    print(result.toJson())
 
 def get_descriptor_length(in_fh):
     """Derives the length of the MP4 elementary stream descriptor at the

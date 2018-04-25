@@ -30,10 +30,6 @@ sys.path.insert(0, path)
 from spatialmedia import metadata_utils
 
 
-def console(contents):
-  print(contents)
-
-
 def main():
   """Main function for printing and injecting spatial media metadata."""
 
@@ -46,7 +42,7 @@ def main():
   args = parser.parse_args()
 
   if len(args.file) > 0:
-    metadata_utils.parse_metadata(args.file, console)
+    metadata_utils.parse_metadata(args.file)
     return
 
   parser.print_help()
