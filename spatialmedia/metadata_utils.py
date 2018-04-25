@@ -27,8 +27,6 @@ import json
 
 from spatialmedia import mpeg
 
-MPEG_FILE_EXTENSIONS = [".mp4", ".mov"]
-
 SPHERICAL_UUID_ID = (
     b"\xff\xcc\x82\x63\xf8\x55\x4a\x93\x88\x14\x58\x7a\x02\x52\x1f\xdd")
 

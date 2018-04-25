@@ -48,11 +48,11 @@ def load(fh, position, end):
         header_size = 16
 
     if size < 8:
-        print("Error, invalid size {} in {} at {}".format(size, name, position))
+        #print("Error, invalid size {} in {} at {}".format(size, name, position))
         return None
 
     if (position + size) > end:
-        print("Error: Leaf box size exceeds bounds.")
+        #print("Error: Leaf box size exceeds bounds.")
         return None
 
     new_box = Box()
@@ -123,7 +123,7 @@ class Box(object):
         """Prints the box structure."""
         size1 = self.header_size
         size2 = self.content_size
-        print("{0} {1} [{2}, {3}]".format(indent, self.name, size1, size2))
+        #print("{0} {1} [{2}, {3}]".format(indent, self.name, size1, size2))
 
 
 def tag_copy(in_fh, out_fh, size):
